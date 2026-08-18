@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Continuum — Disaster Recovery Command</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#FFFFFF;
+    --ink-2:#F6F7FB;
+    --ink-3:#EEF0F7;
+    --line:#E3E6F0;
+    --line-soft:#EBEDF5;
+    --text:#151A2E;
+    --text-dim:#5C6478;
+    --text-faint:#9AA0B4;
+    --amber:#5B4FE9;
+    --amber-dim:#EDEBFD;
+    --red:#E0455A;
+    --red-dim:#FCEAED;
+    --teal:#1FAD8C;
+    --teal-dim:#E4F6F1;
+    --blue:#2F6FED;
+    --disp: 'Space Grotesk', sans-serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:var(--ink);
+    color:var(--text);
+    font-family:var(--body);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{ background:var(--amber); color:#fff; }
+
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  .wrap{ max-width:1240px; margin:0 auto; padding:0 32px; }
+
+  /* ===== Header ===== */
+  header{
+    position:sticky; top:0; z-index:50;
+    background:rgba(255,255,255,0.9);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav{
+    display:flex; align-items:center; justify-content:space-between;
+    height:72px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{
+    width:30px; height:30px; border-radius:8px;
+    background:var(--amber);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--disp); font-weight:700; font-size:15px; color:#fff;
+  }
+  .brand-name{ font-family:var(--disp); font-weight:600; font-size:18px; letter-spacing:-0.01em; }
+  .brand-tag{ font-family:var(--mono); font-size:10px; color:var(--text-faint); letter-spacing:0.08em; text-transform:uppercase; margin-left:6px; padding-top:2px;}
+
+  .nav-links{ display:flex; gap:36px; }
+  .nav-links a{
+    font-size:14px; color:var(--text-dim); font-weight:500;
+    transition:color 0.15s;
+  }
+  .nav-links a:hover{ color:var(--text); }
+
+  .nav-cta{ display:flex; align-items:center; gap:16px; }
+  .status-chip{
+    display:flex; align-items:center; gap:7px;
+    font-family:var(--mono); font-size:11px; color:var(--teal);
+    background:var(--teal-dim); border:1px solid #CFEEE5;
+    padding:6px 12px; border-radius:20px;
+  }
+  .status-dot{
+    width:6px; height:6px; border-radius:50%; background:var(--teal);
+    animation:blink 2s infinite;
+  }
+  @keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+  .btn-primary{
+    background:var(--amber); color:#fff;
+    border:none; padding:10px 18px; border-radius:8px;
+    font-size:13px; font-weight:600;
+    transition:transform 0.15s, background 0.15s;
+  }
+  .btn-primary:hover{ background:#4B40D6; transform:translateY(-1px); }
+
+  /* ===== Hero ===== */
+  .hero{
+    padding:100px 0 70px;
+    background:linear-gradient(180deg, #F8F8FF 0%, #FFFFFF 100%);
+    border-bottom:1px solid var(--line-soft);
+    position:relative;
+    overflow:hidden;
+  }
+  .hero-grid{
+    display:grid; grid-template-columns:1.1fr 0.9fr; gap:60px; align-items:center;
+  }
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; color:var(--amber);
+    text-transform:uppercase; letter-spacing:0.12em;
+    display:flex; align-items:center; gap:8px; margin-bottom:20px;
+  }
+  .eyebrow::before{ content:''; width:16px; height:1px; background:var(--amber); }
+  .hero h1{
+    font-family:var(--disp); font-weight:600; font-size:52px; line-height:1.08;
+    letter-spacing:-0.02em; margin-bottom:22px;
+  }
+  .hero h1 em{ font-style:normal; color:var(--amber); }
+  .hero p{
+    font-size:17px; color:var(--text-dim); max-width:480px; margin-bottom:32px;
+  }
+  .hero-actions{ display:flex; gap:14px; }
+  .btn-secondary{
+    background:#fff; color:var(--text); border:1px solid var(--line);
+    padding:12px 22px; border-radius:8px; font-size:14px; font-weight:600;
+    transition:border-color 0.15s, background 0.15s;
+  }
+  .btn-secondary:hover{ border-color:var(--text-faint); background:var(--ink-2); }
+  .btn-hero{
+    background:var(--amber); color:#fff;
+    border:none; padding:12px 22px; border-radius:8px; font-size:14px; font-weight:700;
+    transition:transform 0.15s, background 0.15s;
+    box-shadow:0 8px 20px -6px rgba(91,79,233,0.45);
+  }
+  .btn-hero:hover{ transform:translateY(-2px); background:#4B40D6; }
+
+  /* Signature: live signal panel */
+  .signal-panel{
+    background:#fff; border:1px solid var(--line);
+    border-radius:16px; padding:26px;
+    box-shadow:0 20px 45px -20px rgba(21,26,46,0.18);
+  }
+  .signal-head{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:18px;
+  }
+  .signal-title{ font-family:var(--mono); font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; }
+  .signal-live{ font-family:var(--mono); font-size:11px; color:var(--red); display:flex; align-items:center; gap:6px; }
+  .signal-live::before{ content:''; width:6px; height:6px; border-radius:50%; background:var(--red); animation:blink 1.4s infinite; }
+
+  .waveform{
+    display:flex; align-items:flex-end; gap:3px; height:70px; margin-bottom:20px;
+  }
+  .waveform span{
+    flex:1; background:var(--ink-3); border-radius:2px 2px 0 0;
+    transition:background 0.3s;
+  }
+  .waveform span.hot{ background:var(--amber); }
+  .waveform span.crit{ background:var(--red); }
+
+  .signal-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .signal-stat{ border-top:1px solid var(--line-soft); padding-top:12px; }
+  .signal-stat .num{ font-family:var(--disp); font-size:26px; font-weight:600; }
+  .signal-stat .lbl{ font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.06em; margin-top:2px; }
+  .num.amber{ color:var(--amber); }
+  .num.red{ color:var(--red); }
+  .num.teal{ color:var(--teal); }
+
+  /* ===== Section shared ===== */
+  section{ padding:80px 0; border-bottom:1px solid var(--line); }
+  .section-head{ display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:36px; }
+  .section-head h2{ font-family:var(--disp); font-size:28px; font-weight:600; letter-spacing:-0.01em; }
+  .section-head p{ color:var(--text-dim); font-size:14px; margin-top:6px; }
+  .section-link{ font-family:var(--mono); font-size:12px; color:var(--text-dim); border-bottom:1px solid var(--line); padding-bottom:2px; }
+  .section-link:hover{ color:var(--amber); border-color:var(--amber); }
+
+  /* ===== Incident cards ===== */
+  .incident-list{ display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .incident{
+    background:#fff; padding:20px 24px;
+    display:grid; grid-template-columns:100px 1fr auto; gap:20px; align-items:center;
+    transition:background 0.15s;
+  }
+  .incident:hover{ background:var(--ink-2); }
+  .sev{
+    font-family:var(--mono); font-size:11px; font-weight:600; text-transform:uppercase;
+    padding:5px 10px; border-radius:20px; text-align:center; letter-spacing:0.04em;
+  }
+  .sev.critical{ background:var(--red-dim); color:var(--red); border:1px solid #F6CBD2; }
+  .sev.high{ background:var(--amber-dim); color:var(--amber); border:1px solid #D9D4FA; }
+  .sev.moderate{ background:#EAF1FE; color:var(--blue); border:1px solid #CBDFFC; }
+  .incident-body h3{ font-family:var(--body); font-size:15px; font-weight:600; margin-bottom:4px; }
+  .incident-meta{ display:flex; gap:14px; font-size:12px; color:var(--text-dim); flex-wrap:wrap; }
+  .incident-meta span{ display:flex; align-items:center; gap:5px; }
+  .incident-meta .dot{ width:4px; height:4px; border-radius:50%; background:var(--text-faint); }
+  .incident-time{ font-family:var(--mono); font-size:12px; color:var(--text-faint); white-space:nowrap; text-align:right; }
+
+  /* ===== Capability grid ===== */
+  .cap-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+  .cap{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:28px 24px; transition:box-shadow 0.2s, transform 0.2s; }
+  .cap:hover{ box-shadow:0 16px 32px -18px rgba(21,26,46,0.18); transform:translateY(-2px); }
+  .cap-num{ font-family:var(--mono); font-size:11px; color:var(--amber); margin-bottom:16px; font-weight:600; }
+  .cap h3{ font-family:var(--disp); font-size:17px; font-weight:600; margin-bottom:10px; }
+  .cap p{ font-size:13px; color:var(--text-dim); line-height:1.6; }
+
+  /* ===== Resource bars ===== */
+  .resource-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .resource-card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:22px 24px; }
+  .resource-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; }
+  .resource-top h4{ font-size:14px; font-weight:600; }
+  .resource-top .val{ font-family:var(--mono); font-size:13px; color:var(--text-dim); }
+  .bar-track{ height:6px; background:var(--ink-3); border-radius:3px; overflow:hidden; border:1px solid var(--line-soft); }
+  .bar-fill{ height:100%; border-radius:3px; }
+  .bar-fill.ok{ background:var(--teal); }
+  .bar-fill.warn{ background:var(--amber); }
+
+  /* ===== Team roster ===== */
+  .team-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .team-card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; display:flex; gap:14px; align-items:flex-start; }
+  .team-avatar{
+    width:38px; height:38px; border-radius:10px; background:var(--amber-dim);
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--disp); font-weight:600; font-size:13px; color:var(--amber);
+    flex-shrink:0;
+  }
+  .team-name{ font-size:14px; font-weight:600; margin-bottom:2px; }
+  .team-role{ font-size:12px; color:var(--text-dim); margin-bottom:8px; }
+  .team-status{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px; }
+  .team-status .d{ width:6px; height:6px; border-radius:50%; }
+  .d.on{ background:var(--teal); } .d.busy{ background:var(--amber); } .d.off{ background:var(--text-faint); }
+
+  /* ===== FAQ ===== */
+  .faq-item{ background:#fff; padding:20px 24px; }
+  .faq-item summary{
+    font-size:15px; font-weight:600; cursor:pointer; list-style:none;
+    display:flex; justify-content:space-between; align-items:center; gap:16px;
+  }
+  .faq-item summary::-webkit-details-marker{ display:none; }
+  .faq-item summary::after{
+    content:'+'; font-family:var(--disp); font-size:20px; color:var(--amber);
+    flex-shrink:0; transition:transform 0.2s;
+  }
+  .faq-item[open] summary::after{ content:'−'; }
+  .faq-item p{ font-size:14px; color:var(--text-dim); margin-top:12px; line-height:1.65; max-width:600px; }
+
+  /* ===== Footer ===== */
+  footer{ padding:50px 0; background:var(--ink-2); }
+  .foot-grid{ display:flex; justify-content:space-between; align-items:center; }
+  .foot-left{ font-size:13px; color:var(--text-faint); }
+  .foot-right{ display:flex; gap:26px; font-size:13px; color:var(--text-dim); }
+  .foot-right a:hover{ color:var(--text); }
+
+  @media (max-width: 900px){
+    .hero-grid{ grid-template-columns:1fr; }
+    .hero h1{ font-size:38px; }
+    .cap-grid{ grid-template-columns:1fr 1fr; }
+    .team-grid{ grid-template-columns:1fr; }
+    .resource-grid{ grid-template-columns:1fr; }
+    .nav-links{ display:none; }
+    .incident{ grid-template-columns:1fr; gap:10px; }
+    .incident-time{ text-align:left; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div class="brand-name">Continuum</div>
+      <div class="brand-tag">DR Ops</div>
+    </div>
+    <nav class="nav-links">
+      <a href="#incidents">Incidents</a>
+      <a href="#resources">Resources</a>
+      <a href="#team">Response teams</a>
+      <a href="#plans">Recovery plans</a>
+    </nav>
+    <div class="nav-cta">
+      <div class="status-chip"><span class="status-dot"></span>All systems monitored</div>
+      <button class="btn-primary">Open command center</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero" style="border-bottom:1px solid var(--line-soft); padding-top:100px;">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Business continuity platform</div>
+      <h1>Recover fast.<br>Coordinate without <em>confusion</em>.</h1>
+      <p>Continuum gives incident commanders one place to see every failure, every responder, and every recovery step — from first alert to full restoration.</p>
+      <div class="hero-actions">
+        <button class="btn-hero">Start a response</button>
+        <button class="btn-secondary">View live demo</button>
+      </div>
+    </div>
+
+    <div class="signal-panel">
+      <div class="signal-head">
+        <div class="signal-title">Network heartbeat</div>
+        <div class="signal-live">Live</div>
+      </div>
+      <div class="waveform" id="waveform"></div>
+      <div class="signal-stats">
+        <div class="signal-stat"><div class="num red">3</div><div class="lbl">Critical</div></div>
+        <div class="signal-stat"><div class="num amber">7</div><div class="lbl">High</div></div>
+        <div class="signal-stat"><div class="num teal">68%</div><div class="lbl">Recovered</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div style="padding:36px 0; border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <div style="text-align:center; font-family:var(--mono); font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:20px;">Trusted by response teams at</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:28px; opacity:0.6;">
+      <div style="font-family:var(--disp); font-weight:600; font-size:18px; color:var(--text-dim);">Northwind</div>
+      <div style="font-family:var(--disp); font-weight:600; font-size:18px; color:var(--text-dim);">Vantage</div>
+      <div style="font-family:var(--disp); font-weight:600; font-size:18px; color:var(--text-dim);">Harborline</div>
+      <div style="font-family:var(--disp); font-weight:600; font-size:18px; color:var(--text-dim);">Cascade Labs</div>
+      <div style="font-family:var(--disp); font-weight:600; font-size:18px; color:var(--text-dim);">Meridian</div>
+      <div style="font-family:var(--disp); font-weight:600; font-size:18px; color:var(--text-dim);">Anchorpoint</div>
+    </div>
+  </div>
+</div>
+
+<section id="incidents">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Active incidents</h2>
+        <p>Ranked by severity and time since detection.</p>
+      </div>
+      <a class="section-link" href="#">View all incidents →</a>
+    </div>
+
+    <div class="incident-list">
+      <div class="incident">
+        <div class="sev critical">Critical</div>
+        <div class="incident-body">
+          <h3>Regional data center outage — US-East</h3>
+          <div class="incident-meta">
+            <span>4,230 users affected</span>
+            <span class="dot"></span>
+            <span>Lead: Sarah Chen</span>
+            <span class="dot"></span>
+            <span>Infrastructure team</span>
+          </div>
+        </div>
+        <div class="incident-time">22 min ago</div>
+      </div>
+
+      <div class="incident">
+        <div class="sev high">High</div>
+        <div class="incident-body">
+          <h3>Network connectivity degradation — Europe</h3>
+          <div class="incident-meta">
+            <span>API latency +45%</span>
+            <span class="dot"></span>
+            <span>Lead: Marcus Rodriguez</span>
+            <span class="dot"></span>
+            <span>Network ops</span>
+          </div>
+        </div>
+        <div class="incident-time">1 hr 15 min ago</div>
+      </div>
+
+      <div class="incident">
+        <div class="sev high">High</div>
+        <div class="incident-body">
+          <h3>Database replication lag — Asia-Pacific</h3>
+          <div class="incident-meta">
+            <span>Lag: 12.3s</span>
+            <span class="dot"></span>
+            <span>Lead: Yuki Tanaka</span>
+            <span class="dot"></span>
+            <span>Database admin</span>
+          </div>
+        </div>
+        <div class="incident-time">3 hr 45 min ago</div>
+      </div>
+
+      <div class="incident">
+        <div class="sev moderate">Moderate</div>
+        <div class="incident-body">
+          <h3>Elevated error rate — Payments API</h3>
+          <div class="incident-meta">
+            <span>Error rate 2.1%</span>
+            <span class="dot"></span>
+            <span>Lead: Priya Nair</span>
+            <span class="dot"></span>
+            <span>Platform team</span>
+          </div>
+        </div>
+        <div class="incident-time">5 hr 02 min ago</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Built for the whole response</h2>
+        <p>From first detection to the post-incident report.</p>
+      </div>
+    </div>
+
+    <div class="cap-grid">
+      <div class="cap">
+        <div class="cap-num">01</div>
+        <h3>Detect</h3>
+        <p>Every monitoring feed lands in one queue, ranked by severity and blast radius, so nothing critical waits behind noise.</p>
+      </div>
+      <div class="cap">
+        <div class="cap-num">02</div>
+        <h3>Coordinate</h3>
+        <p>Assign an incident lead, pull in the right team, and track who's doing what without leaving the page.</p>
+      </div>
+      <div class="cap">
+        <div class="cap-num">03</div>
+        <h3>Recover</h3>
+        <p>Run tested recovery playbooks step by step, with live status so leadership sees real progress, not guesses.</p>
+      </div>
+      <div class="cap">
+        <div class="cap-num">04</div>
+        <h3>Review</h3>
+        <p>Every action is timestamped automatically, turning the response into a ready-made postmortem.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="resources">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Resource capacity</h2>
+        <p>What's available right now, across every region.</p>
+      </div>
+    </div>
+
+    <div class="resource-grid">
+      <div class="resource-card">
+        <div class="resource-top"><h4>Compute — standby servers</h4><span class="val">287 / 420</span></div>
+        <div class="bar-track"><div class="bar-fill ok" style="width:68%"></div></div>
+      </div>
+      <div class="resource-card">
+        <div class="resource-top"><h4>Network bandwidth</h4><span class="val">342 / 500 Gbps</span></div>
+        <div class="bar-track"><div class="bar-fill ok" style="width:68%"></div></div>
+      </div>
+      <div class="resource-card">
+        <div class="resource-top"><h4>Backup storage verified</h4><span class="val">91%</span></div>
+        <div class="bar-track"><div class="bar-fill ok" style="width:91%"></div></div>
+      </div>
+      <div class="resource-card">
+        <div class="resource-top"><h4>On-call responders</h4><span class="val">12 / 15</span></div>
+        <div class="bar-track"><div class="bar-fill warn" style="width:80%"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="team">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <h2>Response teams online</h2>
+        <p>Who's active right now, across every incident.</p>
+      </div>
+      <a class="section-link" href="#">View full roster →</a>
+    </div>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-avatar">SC</div>
+        <div>
+          <div class="team-name">Sarah Chen</div>
+          <div class="team-role">Infrastructure lead</div>
+          <div class="team-status"><span class="d on"></span>Responding</div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">MR</div>
+        <div>
+          <div class="team-name">Marcus Rodriguez</div>
+          <div class="team-role">Network operations</div>
+          <div class="team-status"><span class="d on"></span>Responding</div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">YT</div>
+        <div>
+          <div class="team-name">Yuki Tanaka</div>
+          <div class="team-role">Database admin</div>
+          <div class="team-status"><span class="d busy"></span>Investigating</div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">PN</div>
+        <div>
+          <div class="team-name">Priya Nair</div>
+          <div class="team-role">Platform team</div>
+          <div class="team-status"><span class="d busy"></span>Investigating</div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">JK</div>
+        <div>
+          <div class="team-name">James Kim</div>
+          <div class="team-role">Security response</div>
+          <div class="team-status"><span class="d off"></span>On standby</div>
+        </div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar">AO</div>
+        <div>
+          <div class="team-name">Amara Okafor</div>
+          <div class="team-role">Comms lead</div>
+          <div class="team-status"><span class="d off"></span>On standby</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap" style="max-width:760px;">
+    <div class="section-head" style="display:block;">
+      <h2>Frequently asked questions</h2>
+      <p>Everything commanders and platform owners ask before rollout.</p>
+    </div>
+
+    <div class="faq-list" style="display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden;">
+      <details class="faq-item" open>
+        <summary>How does Continuum detect an incident before customers notice?</summary>
+        <p>Continuum ingests every monitoring and alerting feed you already run, ranks incoming signals by severity and blast radius, and surfaces the top of the queue automatically — no manual triage required.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can multiple teams coordinate on the same incident?</summary>
+        <p>Yes. Each incident gets an assigned lead, a live responder roster, and a shared timeline, so infrastructure, network, and database teams all work from the same picture.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What happens after the incident is resolved?</summary>
+        <p>Every action taken during response is timestamped automatically, giving you a ready-made postmortem instead of a manual writeup.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Does Continuum work across regions and cloud providers?</summary>
+        <p>Continuum tracks resource capacity and response status across every region and provider you operate in, from a single command view.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div class="foot-left">Continuum — disaster recovery command, built for teams who can't afford downtime.</div>
+    <div class="foot-right">
+      <a href="#incidents">Incidents</a>
+      <a href="#resources">Resources</a>
+      <a href="#team">Teams</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const wave = document.getElementById('waveform');
+  const bars = 48;
+  for (let i = 0; i < bars; i++) {
+    const bar = document.createElement('span');
+    bar.style.height = (Math.random() * 60 + 10) + '%';
+    wave.appendChild(bar);
+  }
+
+  function animateWave(){
+    const spans = wave.querySelectorAll('span');
+    spans.forEach((s, i) => {
+      const h = Math.random() * 60 + 10;
+      s.style.height = h + '%';
+      s.className = '';
+      if (h > 55) s.className = 'crit';
+      else if (h > 38) s.className = 'hot';
+    });
+  }
+  setInterval(animateWave, 1400);
+  animateWave();
+</script>
+
+</body>
+</html>
