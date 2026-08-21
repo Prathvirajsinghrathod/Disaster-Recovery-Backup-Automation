@@ -68,3 +68,85 @@ fetch('http://localhost:4000/api/incidents')
 
 Remember to update the frontend's fetch URLs if you deploy this API somewhere
 other than `localhost:4000`.
+# DR & Automation Tracker — MySQL Database
+
+A MySQL database that models a **Disaster Recovery + Automation tracking system** — useful as a portfolio project to demonstrate DR concepts (RTO/RPO, DR sites, backups, failover tests, incidents) alongside automation script/run tracking.
+
+## Schema Overview
+
+```mermaid
+erDiagram
+    DR_SITES ||--o{ SYSTEMS : hosts
+    SYSTEMS ||--o{ DR_PLANS : has
+    SYSTEMS ||--o{ BACKUPS : generates
+    SYSTEMS ||--o{ DR_TESTS : undergoes
+    SYSTEMS ||--o{ INCIDENTS : experiences
+    SYSTEMS ||--o{ AUTOMATION_SCRIPTS : uses
+    AUTOMATION_SCRIPTS ||--o{ AUTOMATION_RUNS : executes
+```
+
+| Table | Purpose |
+|---|---|
+| `dr_sites` | DR site inventory (hot/warm/cold, provider, region) |
+| `systems` | Business systems/apps with RTO/RPO targets and criticality tier |
+| `dr_plans` | Documented DR strategy per system (Pilot-Light, Warm-Standby, etc.) |
+| `backups` | Backup job history (type, status, size, verification status) |
+| `dr_tests` | DR drill/test results (tabletop → full-interruption) |
+| `incidents` | Real outages, whether DR was invoked, downtime (auto-calculated) |
+| `automation_scripts` | Registry of failover/backup/provisioning scripts |
+| `automation_runs` | Execution history/logs of automation scripts |
+| `v_system_dr_posture` | View: current DR readiness snapshot per system |
+
+## Setup
+
+```bash
+mysql -u root -p < schema.sql
+mysql -u root -p < seed_data.sql
+```
+
+## Example Queries
+
+```sql
+-- DR readiness snapshot
+SELECT * FROM v_system_dr_posture;
+
+-- Systems whose last DR test failed or was partial
+SELECT s.system_name, t.test_date, t.result, t.notes
+FROM dr_tests t
+JOIN systems s ON s.system_id = t.system_id
+WHERE t.result IN ('Fail','Partial')
+ORDER BY t.test_date DESC;
+
+-- Backups that have never been restore-verified
+SELECT s.system_name, b.backup_id, b.start_time
+FROM backups b
+JOIN systems s ON s.system_id = b.system_id
+WHERE b.verified = FALSE AND b.status = 'Success';
+
+-- Total downtime per system (from real incidents)
+SELECT s.system_name, SUM(i.downtime_minutes) AS total_downtime_minutes
+FROM incidents i
+JOIN systems s ON s.system_id = i.system_id
+GROUP BY s.system_name
+ORDER BY total_downtime_minutes DESC;
+
+-- Automation script reliability
+SELECT a.script_name,
+       COUNT(*) AS total_runs,
+       SUM(r.status = 'Success') AS successful_runs,
+       ROUND(SUM(r.status = 'Success') / COUNT(*) * 100, 1) AS success_rate_pct
+FROM automation_runs r
+JOIN automation_scripts a ON a.script_id = r.script_id
+GROUP BY a.script_name;
+```
+
+## Files
+
+- `schema.sql` — table definitions, foreign keys, indexes, and a summary view
+- `seed_data.sql` — realistic sample data (5 systems, 4 DR sites, backups, tests, incidents, automation runs)
+
+## Notes
+
+- Requires MySQL 8.0+ (uses generated columns, CTE-friendly syntax).
+- `downtime_minutes` in `incidents` is a **generated column** — computed automatically from `start_time`/`resolved_time`, no manual calculation needed.
+- Extend this further with tables for `notification_contacts`, `sla_agreements`, or `compliance_audits` if your project needs it.
