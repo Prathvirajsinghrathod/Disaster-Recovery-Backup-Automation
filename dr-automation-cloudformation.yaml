@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DR & Automation Tracker Project - Provisions a MySQL RDS instance
+  (Multi-AZ, encrypted, credentials in Secrets Manager) plus an AWS Backup
+  vault/plan with tag-based selection, retention lifecycle, optional
+  cross-region copy, and SNS failure notifications.
+
+# ---------------------------------------------------------------------
+# PARAMETERS
+# ---------------------------------------------------------------------
+Parameters:
+
+  EnvironmentName:
+    Type: String
+    Default: dr-automation
+    Description: Prefix used to name/tag all resources.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC in which to launch the RDS instance.
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two private subnets (different AZs) for the DB subnet group.
+
+  AllowedIngressCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR range allowed to connect to MySQL on port 3306 (e.g., your app subnet range).
+
+  DBName:
+    Type: String
+    Default: dr_automation_db
+    Description: Initial database name created on the RDS instance.
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+      - db.r6g.large
+    Description: RDS instance class.
+
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 1000
+    Description: Allocated storage in GB.
+
+  MultiAZ:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Whether to deploy a synchronous standby in a second AZ (High Availability).
+
+  BackupRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    MaxValue: 35
+    Description: Native RDS automated backup retention (point-in-time recovery window).
+
+  AWSBackupRetentionDays:
+    Type: Number
+    Default: 90
+    Description: How long AWS Backup keeps recovery points for this resource.
+
+  EnableCrossRegionCopy:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: If true, AWS Backup will copy recovery points to DestinationBackupVaultArn.
+
+  DestinationBackupVaultArn:
+    Type: String
+    Default: ''
+    Description: >
+      ARN of a backup vault in your DR region (e.g., arn:aws:backup:us-west-2:123456789012:backup-vault:dr-vault).
+      Required only if EnableCrossRegionCopy is true. Create the destination vault in the DR region first.
+
+  NotificationEmail:
+    Type: String
+    Description: Email address to receive backup job failure/notification alerts.
+
+# ---------------------------------------------------------------------
+# CONDITIONS
+# ---------------------------------------------------------------------
+Conditions:
+  IsMultiAZ: !Equals [!Ref MultiAZ, 'true']
+  DoCrossRegionCopy: !Equals [!Ref EnableCrossRegionCopy, 'true']
+
+# ---------------------------------------------------------------------
+# RESOURCES
+# ---------------------------------------------------------------------
+Resources:
+
+  # ---------------- Networking ----------------
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "Subnet group for ${EnvironmentName} RDS instance"
+      SubnetIds: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-db-subnet-group"
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Allow MySQL access to ${EnvironmentName} RDS instance"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: !Ref AllowedIngressCidr
+          Description: Application access to MySQL
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-db-sg"
+
+  # ---------------- Credentials ----------------
+
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${EnvironmentName}/rds/mysql-credentials"
+      Description: Auto-generated master credentials for the DR Automation MySQL RDS instance.
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludeCharacters: '"@/\'
+
+  # ---------------- RDS Instance ----------------
+
+  MySQLInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub "${EnvironmentName}-mysql"
+      Engine: mysql
+      EngineVersion: '8.0.46'
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: !Ref DBName
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DBSecret}:SecretString:username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DBSecret}:SecretString:password}}"
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      MultiAZ: !If [IsMultiAZ, true, false]
+      BackupRetentionPeriod: !Ref BackupRetentionDays
+      PreferredBackupWindow: '03:00-04:00'
+      PreferredMaintenanceWindow: 'sun:04:30-sun:05:30'
+      DeletionProtection: true
+      CopyTagsToSnapshot: true
+      EnablePerformanceInsights: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-mysql"
+        - Key: Project
+          Value: dr-automation-tracker
+        - Key: dr-backup
+          Value: 'true'   # used by the AWS Backup tag-based selection below
+
+  # ---------------- SNS for backup notifications ----------------
+
+  BackupNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${EnvironmentName}-backup-notifications"
+
+  BackupNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref BackupNotificationTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  BackupNotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref BackupNotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowBackupServiceToPublish
+            Effect: Allow
+            Principal:
+              Service: backup.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref BackupNotificationTopic
+
+  # ---------------- AWS Backup: Vault, Plan, Selection ----------------
+
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: !Sub "${EnvironmentName}-vault"
+      Notifications:
+        SNSTopicArn: !Ref BackupNotificationTopic
+        BackupVaultEvents:
+          - BACKUP_JOB_FAILED
+          - RESTORE_JOB_FAILED
+          - COPY_JOB_FAILED
+          - BACKUP_JOB_COMPLETED
+
+  BackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub "${EnvironmentName}-backup-plan"
+        BackupPlanRule:
+          - RuleName: DailyBackups
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: 'cron(0 2 * * ? *)'   # 2 AM daily
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 180
+            Lifecycle:
+              DeleteAfterDays: !Ref AWSBackupRetentionDays
+            RecoveryPointTags:
+              Environment: !Ref EnvironmentName
+            CopyActions: !If
+              - DoCrossRegionCopy
+              - - DestinationBackupVaultArn: !Ref DestinationBackupVaultArn
+                  Lifecycle:
+                    DeleteAfterDays: !Ref AWSBackupRetentionDays
+              - !Ref "AWS::NoValue"
+
+  BackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-aws-backup-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: backup.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
+
+  BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref BackupPlan
+      BackupSelection:
+        SelectionName: !Sub "${EnvironmentName}-tagged-resources"
+        IamRoleArn: !GetAtt BackupRole.Arn
+        ListOfTags:
+          - ConditionType: STRINGEQUALS
+            ConditionKey: dr-backup
+            ConditionValue: 'true'
+
+  # ---------------- Backup Vault Lock (optional ransomware protection) ----------------
+
+  BackupVaultLock:
+    Type: AWS::Backup::BackupVault
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BackupVaultName: !Sub "${EnvironmentName}-vault-locked"
+      LockConfiguration:
+        MinRetentionDays: 7
+        MaxRetentionDays: !Ref AWSBackupRetentionDays
+        ChangeableForDays: 3   # cooling-off period before lock becomes immutable
+
+# ---------------------------------------------------------------------
+# OUTPUTS
+# ---------------------------------------------------------------------
+Outputs:
+
+  DBInstanceEndpoint:
+    Description: RDS MySQL connection endpoint (hostname)
+    Value: !GetAtt MySQLInstance.Endpoint.Address
+
+  DBInstancePort:
+    Description: RDS MySQL connection port
+    Value: !GetAtt MySQLInstance.Endpoint.Port
+
+  DBSecretArn:
+    Description: Secrets Manager ARN holding the master username/password
+    Value: !Ref DBSecret
+
+  BackupVaultName:
+    Description: Name of the AWS Backup vault holding recovery points
+    Value: !Ref BackupVault
+
+  BackupPlanId:
+    Description: ID of the AWS Backup plan
+    Value: !Ref BackupPlan
+
+  SNSTopicArn:
+    Description: SNS topic ARN for backup job notifications
+    Value: !Ref BackupNotificationTopic
